@@ -36,7 +36,7 @@ with open("../inputs/trucks.csv",'r') as f:
 
 demands = {}     #{order_id:location_code,demand_weight}
 orders = []     #list of invoice_ordeer
-with open("../inputs/order_list.csv",'r') as f:
+with open("../inputs/order_list_14J.csv",'r') as f:
     reader = csv.DictReader(f)
     headers = [header.strip() for header in reader.fieldnames]
     for row in reader:
@@ -110,10 +110,8 @@ def return_dist_time(source_code,dest_code):  # returns (dist,time)
             return [float(obj.travel_distance_in_km),float(obj.travel_time_in_min)]    
     return [0,0]
 
-# sys.exit()
-objective_1 = True   # Minimize the number of vehicles used
-objective_2 = False  # Minimize total travel distance
-objective_3 = False  # Minimize total cost
+
+
 def build_model(orders,vehicles,demands,vehicles_dict,order_vehicle_id):
     prob = LpProblem("CVRPTW", LpMinimize)
     # ****************************************
@@ -136,6 +134,7 @@ def build_model(orders,vehicles,demands,vehicles_dict,order_vehicle_id):
     #                 x[(i,j,v)] = LpVariable('x_' + str(i) + '_' + str(j) + '_' + str(v),cat = 'Binary')
     
     print('xijv variables',len(x))
+    sys.stdout.flush()
     s = {} #Continuous s_i,v : = time vehicle v starts to service customer i
     for i in orders:
         for v in vehicles:
@@ -147,15 +146,21 @@ def build_model(orders,vehicles,demands,vehicles_dict,order_vehicle_id):
                 s[(i,v)] = LpVariable('s#' + str(i) + '#' + str(v),lowBound=480,upBound = 1320, cat = 'Continuous')
 
     print('siv variables',len(s))
+    sys.stdout.flush()
 
     I = {}  # I_v := 1 if vehicle v is used; otherwise 0
     for v in vehicles:
         I[v] = LpVariable('I#' + str(v) , cat = 'Binary')
+
+    print(f'Iv variables {len(I)}')
+    sys.stdout.flush()
     # ********************************************
     # Objective
     # ********************************************
     # Minimize the number of vehicles used
     if objective_1:
+        print(f"Minimize the number of vehicles used")
+        sys.stdout.flush()
         obj_val = 0 
         for v in vehicles:
             obj_val+=I[v]
@@ -164,6 +169,8 @@ def build_model(orders,vehicles,demands,vehicles_dict,order_vehicle_id):
 
     # Minimize total travel distance
     if objective_2:
+        print(f"Minimize total travel distance")
+        sys.stdout.flush()
         obj_val = 0
         for v in vehicles:
             for i in orders[:-1]:
@@ -175,6 +182,8 @@ def build_model(orders,vehicles,demands,vehicles_dict,order_vehicle_id):
 
     # Minimize total cost
     if objective_3:
+        print(f"Minimize total cost")
+        sys.stdout.flush()
         obj_val = 0
         for v in vehicles:
             obj_val+= I[v]*vehicles_dict[v][2]
@@ -187,6 +196,7 @@ def build_model(orders,vehicles,demands,vehicles_dict,order_vehicle_id):
 
         prob += obj_val
     print("Finished modelling objective")
+    sys.stdout.flush()
     # ********************************************
     # Constraints
     # ********************************************
@@ -195,19 +205,21 @@ def build_model(orders,vehicles,demands,vehicles_dict,order_vehicle_id):
         prob += lpSum(x[('INV_source_00',j,v)] for j in orders[1:-1] if ('INV_source_00',j,v) in x) == I[v], f"Source[{('A123',j,v)}]"
 
     print("Finished modelling Start from depot")
+    sys.stdout.flush()
 
     # End at depot
     for v in vehicles:
         prob += lpSum(x[(i,'INV_sink_00',v)] for i in orders[1:-1] if (i,'INV_sink_00',v) in x) == I[v], f"Sink[{(i,'A123',v)}]"
 
     print("Finished modelling End at depot")
-
+    sys.stdout.flush()
     # Flow Balancing
     for v in vehicles:
         for h in orders[1:-1]:
             prob += lpSum(x[(i,h,v)] for i in orders[:-1] if (i,h,v) in x) == lpSum(x[(h,j,v)] for j in orders[1:] if (h,j,v) in x)
 
     print("Finished modelling Flow Balancing")
+    sys.stdout.flush()
 
     # Each customer is visited exactly once
     for i in orders[1:-1]:
@@ -222,6 +234,7 @@ def build_model(orders,vehicles,demands,vehicles_dict,order_vehicle_id):
     #         aux_sum += lpSum(x[(i,j,v)] for i in orders[:-1] if (i,j,v) in x) 
     #     prob += aux_sum ==1
     print("Finished modelling Each customer is visited exactly once")
+    sys.stdout.flush()
 
 
     # Vehicle capacity constraint    
@@ -231,6 +244,7 @@ def build_model(orders,vehicles,demands,vehicles_dict,order_vehicle_id):
             aux_sum += lpSum([demands[i][1]*x[(i,j,v)] for i in orders[1:-1] if (i,j,v) in x]) 
         prob += aux_sum <= int(vehicles_dict[v][1])*I[v]
     print("Finished modelling Vehicle capacity constraint")
+    sys.stdout.flush()
 
     # Time window constraints
     #considering time in minutes a_i = 08:00 = 480 mins and b_i = 22:00 = 1320 mins
@@ -241,6 +255,7 @@ def build_model(orders,vehicles,demands,vehicles_dict,order_vehicle_id):
                     prob += s[(i,v)] + 20 + return_dist_time(i,j)[1] - 1e8*(1- x[(i,j,v)]) <= s[(j,v)]
 
     print("Finished modelling Time window constraints")
+    sys.stdout.flush()
 
     
     # Linking constraints
@@ -251,18 +266,19 @@ def build_model(orders,vehicles,demands,vehicles_dict,order_vehicle_id):
                     prob += x[(i,j,v)] <= I[(v)]
 
     print("Finished modelling Linking constraints")
+    sys.stdout.flush()
 
     
-    #Vehicle Compatibility
-    for i in orders[:-1]:
-        for j in orders[1:]:
-            for v in vehicles:
-                if i!=j and (i,j,v) in x:
-                    if (v in order_vehicle_id[i]) and (v in order_vehicle_id[j]):
-                        x[(i,j,v)] <= I[v]
-                    else:
-                        x[(i,j,v)] == 0
-    print("Finished Vehicle Compatibility constraints")
+    # #Vehicle Compatibility
+    # for i in orders[:-1]:
+    #     for j in orders[1:]:
+    #         for v in vehicles:
+    #             if i!=j and (i,j,v) in x:
+    #                 if (v in order_vehicle_id[i]) and (v in order_vehicle_id[j]):
+    #                     x[(i,j,v)] <= I[v]
+    #                 else:
+    #                     x[(i,j,v)] == 0
+    # print("Finished Vehicle Compatibility constraints")
     
     # *********************************
     # Solve the problem
@@ -273,16 +289,20 @@ def build_model(orders,vehicles,demands,vehicles_dict,order_vehicle_id):
     prob.writeLP("../output/cvrptw.lp")
     # print(prob)
     if solver == 'GUROBI':
-        prob.solve(GUROBI_CMD(timeLimit=300))#,gapRel=0.03))
+        prob.solve(GUROBI(MIPFocus=2,Cuts=3)) #,timeLimit=500,gapRel=0.1))
     else:
         prob.solve()
 
     # Print the status of the solved LP
     print("Status:", LpStatus[prob.status])
+    sys.stdout.flush()
     print("objective=", value(prob.objective))
+    sys.stdout.flush()
 
-    #Validation
-    #Post processing to get routes of each vehicle
+    print(f'Validation')
+    sys.stdout.flush()
+    print(f'Post processing to get routes of each vehicle')
+    sys.stdout.flush()
     vx = {}   #{'truck_id':[i,j]}
     for v in vehicles:
         vx.update({v:[]})
@@ -292,7 +312,6 @@ def build_model(orders,vehicles,demands,vehicles_dict,order_vehicle_id):
                 if x_list[0] == 'x':
                     if x_list[3] == v:
                         vx[v].append(var.name)
-    # print(vx)
 
     def extract_linked_identifiers(entries):
         parts =[]
@@ -319,11 +338,15 @@ def build_model(orders,vehicles,demands,vehicles_dict,order_vehicle_id):
         vehicleRoute.update({key:route})
         if len(route) > 0:
             print(key,route)
+            sys.stdout.flush()
+            print('\n')
+            sys.stdout.flush()
 
         links = extract_linked_identifiers(values)
         # print(links)
         if len(links) >0:
-            print(f" Truck {key}")
+            print(f"Truck {key}")
+            sys.stdout.flush()
         cap = vehicles_dict[key][1]
         #cumulative weights of orders served
         wt=0
@@ -334,19 +357,29 @@ def build_model(orders,vehicles,demands,vehicles_dict,order_vehicle_id):
                 dist+=return_dist_time(link[0],link[1])[0]
             for order in route[1:-1]:    
                 wt+=demands[order][1]  
-            print(f" Capacity {cap} total weights served {wt} total distance convered {dist}")
+            print(f"Capacity {cap} total weights served {wt} total distance covered {dist}")
+            sys.stdout.flush()
+            print('\n')
             travel_dist.append(dist)
 
     print(f"Total Travel Distance of all trucks {sum(travel_dist)}")
+    sys.stdout.flush()
 
-        
-    # for v in vehicles:
-    #     veh_tour = {v:[]}
-    #     for var in prob.variables():
-    #         temp_list = var.name.split('-')
-    #         if temp_list[0] == 's' and temp_list[-1] == v:
-    #             veh_tour[v].append({var:var.varValue})
-    #     print(veh_tour)                                                                
+    print(f'Time Window validation')
+    sys.stdout.flush()
+    for key,val in vehicleRoute.items():
+        siv_list=[]
+        for order in val:
+            siv = (order,key)
+            siv_list.append((order,s[siv].varValue))
+        if len(siv_list)>0:
+            print(key,siv_list)
+            sys.stdout.flush()
+            print('\n')
+            sys.stdout.flush()                                                            
 
 if __name__ == "__main__":
+    objective_1 = False   # Minimize the number of vehicles used
+    objective_2 = False  # Minimize total travel distance
+    objective_3 = True  # Minimize total cost
     build_model(orders,vehicles,demands,vehicles_dict,order_vehicle_id)
