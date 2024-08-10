@@ -286,7 +286,8 @@ def build_model(orders,vehicles,demands,vehicles_dict,order_vehicle_id):
     solver = 'GUROBI' 
     print('-'*50)
     print('Optimization solver', solver , 'called')
-    prob.writeLP("../output/cvrptw.lp")
+    prob.writeLP("../output/cvrptw_14J.lp")
+    prob.writeMPS("../output/cvrptw_14J.mps")
     # print(prob)
     if solver == 'GUROBI':
         prob.solve(GUROBI(MIPFocus=2,Cuts=3)) #,timeLimit=500,gapRel=0.1))
