@@ -1,0 +1,20 @@
+Dealing with infeasibility
+
+Save the model as a mps file in pulp, then use gurobi_cl and ask the command-line tool to write a .ilp format file.
+It will attempt to solve the model, and if the model is found to be infeasible, it will automatically compute an IIS and write it to the requested file name.
+
+Some useful terminal commands
+gurobi_cl model.mps
+
+Setting Parameters
+gurobi_cl TimeLimit=20 model.mps
+
+Attempt to solve the model, if found infeasible writes IIS to specified file.
+gurobi_cl ResultFile=model.ilp model.mps
+
+Irreducible Inconsistent Subsystem (IIS). 
+An IIS is a subset of the constraints and variable bounds with the following properties:
+- It is still infeasible, and
+- If a single constraint or bound is removed, the subsystem becomes feasible. 
+
+Note that an infeasible model may have multiple IISs. The one returned by Gurobi is not necessarily the smallest one; there may exist others with fewer constraints or bounds.
